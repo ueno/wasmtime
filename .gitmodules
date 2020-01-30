@@ -6,4 +6,4 @@
 	url = https://github.com/WebAssembly/wasm-c-api
 [submodule "crates/wasi-common/WASI"]
 	path = crates/wasi-common/wig/WASI
-	url = https://github.com/WebAssembly/WASI
+	url = https://github.com/ueno/WASI.git

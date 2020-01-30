@@ -24,6 +24,7 @@
 mod ctx;
 mod error;
 mod fdentry;
+mod cipherentry;
 pub mod fs;
 mod helpers;
 mod host;

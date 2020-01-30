@@ -1,4 +1,5 @@
 use crate::fdentry::FdEntry;
+use crate::cipherentry::CipherEntry;
 use crate::{wasi, Error, Result};
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -255,7 +256,9 @@ impl WasiCtxBuilder {
             log::debug!("WasiCtx fds = {:?}", fds);
         }
 
-        Ok(WasiCtx { args, env, fds })
+        let ciphers: HashMap<wasi::__wasi_aead_t, CipherEntry> = HashMap::new();
+
+        Ok(WasiCtx { args, env, fds, ciphers })
     }
 }
 
@@ -264,6 +267,7 @@ pub struct WasiCtx {
     fds: HashMap<wasi::__wasi_fd_t, FdEntry>,
     pub(crate) args: Vec<CString>,
     pub(crate) env: Vec<CString>,
+    ciphers: HashMap<wasi::__wasi_aead_t, CipherEntry>,
 }
 
 impl WasiCtx {
@@ -332,4 +336,33 @@ impl WasiCtx {
     pub(crate) fn remove_fd_entry(&mut self, fd: wasi::__wasi_fd_t) -> Result<FdEntry> {
         self.fds.remove(&fd).ok_or(Error::EBADF)
     }
+
+    fn insert_handle<E>(map: &mut HashMap<u32, E>, e: E) -> Result<u32> {
+        let mut handle = 0;
+        while map.contains_key(&handle) {
+            if let Some(next_handle) = handle.checked_add(1) {
+                handle = next_handle;
+            } else {
+                return Err(Error::EMFILE);
+            }
+        }
+        map.insert(handle, e);
+        Ok(handle)
+    }
+
+    /// Get an immutable `CipherEntry` corresponding to the specified raw WASI `cipher`.
+    pub(crate) fn get_cipher_entry(&self, aead: wasi::__wasi_aead_t) -> Result<&CipherEntry> {
+        self.ciphers.get(&aead).ok_or(Error::EBADF)
+    }
+
+    /// Insert the specified `CipherEntry` into the `WasiCtx` object.
+    pub(crate) fn insert_cipher_entry(&mut self, ce: CipherEntry) -> Result<wasi::__wasi_aead_t> {
+        Self::insert_handle(&mut self.ciphers, ce)
+    }
+
+    /// Remove `CipherEntry` corresponding to the specified raw WASI `cipher` from the `WasiCtx` object.
+    pub(crate) fn remove_cipher_entry(&mut self, aead: wasi::__wasi_aead_t) -> Result<CipherEntry> {
+        self.ciphers.remove(&aead).ok_or(Error::EBADF)
+    }
+
 }

@@ -244,6 +244,7 @@ dec_enc_scalar!(__wasi_fdflags_t, dec_fdflags_byref, enc_fdflags_byref);
 dec_enc_scalar!(__wasi_device_t, dev_device_byref, enc_device_byref);
 dec_enc_scalar!(__wasi_inode_t, dev_inode_byref, enc_inode_byref);
 dec_enc_scalar!(__wasi_linkcount_t, dev_linkcount_byref, enc_linkcount_byref);
+dec_enc_scalar!(__wasi_aead_t, dec_aead_byref, enc_aead_byref);
 
 pub(crate) fn dec_filestat_byref(
     memory: &mut [u8],

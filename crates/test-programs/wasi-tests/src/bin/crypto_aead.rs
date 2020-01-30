@@ -1,0 +1,79 @@
+unsafe fn test_crypto_aead() {
+    let key =
+        b"\x0e\x00\xc7\x65\x61\xd2\xbd\x9b\x40\xc3\xc1\x54\x27\xe2\xb0\x8f";
+    let nonce =
+        b"\x49\x2c\xad\xac\xcd\x3c\xa3\xfb\xc9\xcf\x9f\x06\xeb\x33\x25\xc4\
+          \xe1\x59\x85\x0b\x0d\xbe\x98\x19\x9b\x89\xb7\xaf\x52\x88\x06\x61\
+          \x0b\x6f\x63\x99\x8e\x1e\xae\x80\xc3\x48\xe7\x4c\xbb\x92\x1d\x83\
+          \x26\x63\x16\x31\xfc\x6a\x5d\x30\x4f\x39\x16\x6d\xaf\x7e\xa1\x5f\
+          \xa1\x97\x7f\x10\x18\x19\xad\xb5\x10\xb5\x0f\xe9\x93\x2e\x12\xc5\
+          \xa8\x5a\xa3\xfd\x1e\x73\xd8\xd7\x60\xaf\x21\x8b\xe8\x29\x90\x3a\
+          \x77\xc6\x33\x59\xd7\x5e\xdd\x91\xb4\xf6\xed\x54\x65\xa7\x26\x62\
+          \xf5\x05\x59\x99\xe0\x59\xe7\x65\x4a\x8e\xdc\x92\x1a\xa0\xd4\x96";
+    let auth =
+        b"\xd8\xf1\x16\x3d\x8c\x84\x02\x92\xa2\xb2\xda\xcf\x4a\xc7\xc3\x6a\
+          \xff\x87\x33\xf1\x8f\xab\xb4\xfa\x55\x94\x54\x41\x25\xe0\x3d\x1e\
+          \x6e\x5d\x6d\x0f\xd6\x16\x56\xc8\xd8\xf3\x27\xc9\x28\x39\xae\x55\
+          \x39\xbb\x46\x9c\x92\x57\xf1\x09\xeb\xff\x85\xaa\xd7\xbd\x22\x0f\
+          \xda\xa9\x5c\x02\x2d\xbd\x0c\x7b\xb2\xd8\x78\xad\x50\x41\x22\xc9\
+          \x43\x04\x5d\x3c\x5e\xba\x8f\x1f\x56\xc0";
+    let plaintext =
+        b"\xfe\xf0\x3c\x2d\x7f\xb1\x5b\xf0\xd2\xdf\x18\x00\x7d\x99\xf9\x67\
+          \xc8\x78\xad\x59\x35\x90\x34\xf7\xbb\x2c\x19\xaf\x12\x06\x85\xd7\
+          \x8e\x32\xf6\xb8\xb8\x3b\x03\x20\x19\x95\x6c\xa9\xc0\x19\x57\x21\
+          \x47\x6b\x85";
+    let aeadtext =
+        b"\x4f\x6c\xf4\x71\xbe\x7c\xbd\x25\x75\xcd\x5a\x17\x47\xae\xa8\xfe\
+          \x9d\xea\x83\xe5\x19\x36\xbe\xac\x3e\x68\xf6\x62\x06\x92\x20\x60\
+          \xc6\x97\xff\xa7\xaf\x80\xad\x6b\xb6\x8f\x2c\xf4\xfc\x97\x41\x6e\
+          \xe5\x2a\xbe";
+    let tag =
+        b"\xe2\x0b\x66\x55";
+
+    let aead = wasi::crypto_aead_open("A128GCM", key.as_ptr(), key.len())
+        .expect("opening a aead handle");
+
+    let mut data_buf = vec![0; plaintext.len()];
+    data_buf.copy_from_slice(plaintext);
+
+    let mut tag_buf = vec![0; 4];
+
+    wasi::crypto_aead_encrypt(aead,
+                              nonce.as_ptr(),
+                              nonce.len(),
+                              auth.as_ptr(),
+                              auth.len(),
+                              &[wasi::Iovec {
+                                  buf: data_buf.as_mut_ptr(),
+                                  buf_len: data_buf.len(),
+                              }],
+                              tag_buf.as_mut_ptr(),
+                              tag_buf.len())
+        .expect("encrypting data");
+
+    assert_eq!(data_buf, aeadtext.to_vec());
+    assert_eq!(tag_buf, tag.to_vec());
+
+    wasi::crypto_aead_decrypt(aead,
+                              nonce.as_ptr(),
+                              nonce.len(),
+                              auth.as_ptr(),
+                              auth.len(),
+                              &[wasi::Iovec {
+                                  buf: data_buf.as_mut_ptr(),
+                                  buf_len: data_buf.len(),
+                              }],
+                              tag_buf.as_ptr(),
+                              tag_buf.len())
+        .expect("decrypting data");
+
+    assert_eq!(data_buf, plaintext.to_vec());
+
+    wasi::crypto_aead_close(aead)
+        .expect("closing a aead handle");
+}
+
+fn main() {
+    // Run the tests.
+    unsafe { test_crypto_aead() }
+}
