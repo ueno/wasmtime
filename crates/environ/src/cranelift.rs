@@ -298,8 +298,9 @@ fn compile(env: CompileEnv<'_>) -> Result<ModuleCacheDataTupleType, CompileError
     env.function_body_inputs
         .into_iter()
         .collect::<Vec<(DefinedFuncIndex, &FunctionBodyData<'_>)>>()
-        .par_iter()
-        .map_init(FuncTranslator::new, |func_translator, (i, input)| {
+        .iter()
+        .map(|(i, input)| {
+            let mut func_translator = FuncTranslator::new();
             let func_index = env.local.func_index(*i);
             let mut context = Context::new();
             context.func.name = get_func_name(func_index);
