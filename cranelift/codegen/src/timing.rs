@@ -115,9 +115,6 @@ mod details {
     /// Multiple passes can be active at the same time, but they must be started and stopped in a
     /// LIFO fashion.
     pub struct TimingToken {
-        /// Start time for this pass.
-        start: Instant,
-
         // Pass being timed by this token.
         pass: Pass,
 
@@ -190,7 +187,6 @@ mod details {
         let prev = CURRENT_PASS.with(|p| p.replace(pass));
         debug!("timing: Starting {}, (during {})", pass, prev);
         TimingToken {
-            start: Instant::now(),
             pass,
             prev,
         }
@@ -199,7 +195,7 @@ mod details {
     /// Dropping a timing token indicated the end of the pass.
     impl Drop for TimingToken {
         fn drop(&mut self) {
-            let duration = self.start.elapsed();
+            let duration = Duration::new(0, 0);
             debug!("timing: Ending {}", self.pass);
             let old_cur = CURRENT_PASS.with(|p| p.replace(self.prev));
             debug_assert_eq!(self.pass, old_cur, "Timing tokens dropped out of order");
