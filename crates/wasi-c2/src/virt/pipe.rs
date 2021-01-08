@@ -11,7 +11,7 @@
 //!
 use crate::file::{FdFlags, FileType, Filestat, WasiFile};
 use crate::Error;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Write, Seek};
 use std::sync::{Arc, RwLock};
 use system_interface::fs::{Advice, FileIoExt};
 
@@ -362,6 +362,182 @@ impl<W: Write> WasiFile for WritePipe<W> {
             filetype: self.get_filetype()?,
             nlink: 0,
             size: 0, // XXX no way to get a size out of a Write :(
+            atim: None,
+            mtim: None,
+            ctim: None,
+        })
+    }
+    fn set_filestat_size(&self, _size: u64) -> Result<(), Error> {
+        Err(Error::Perm)
+    }
+}
+
+/// A virtual bi-directional pipe.
+///
+/// ```
+/// # use wasi_c2::WasiCtx;
+/// # use wasi_c2::virt::pipe::Pipe;
+/// let mut ctx = WasiCtx::builder();
+/// let mut buffer: Vec<u8> = b"hello from stdin!".as_ref().into();
+/// let pipe = Pipe::from(buffer);
+/// ctx.stdin(Box::new(pipe.clone()));
+/// ctx.stdout(Box::new(pipe.clone()));
+/// ```
+#[derive(Debug)]
+pub struct Pipe<I: Read + Write + Seek> {
+    inner: Arc<RwLock<I>>,
+}
+
+impl<I: Read + Write + Seek> Clone for Pipe<I> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<I: Read + Write + Seek> Pipe<I> {
+    /// Create a new pipe from a type that implements `Read` and `Write`.
+    ///
+    /// All `Handle` write operations delegate to writing to this underlying writer.
+    pub fn new(inner: I) -> Self {
+        Self::from_shared(Arc::new(RwLock::new(inner)))
+    }
+
+    /// Create a new pipe from a shareable `Write` type.
+    ///
+    /// All `Handle` write operations delegate to writing to this underlying writer.
+    pub fn from_shared(inner: Arc<RwLock<I>>) -> Self {
+        Self { inner }
+    }
+
+    /// Try to convert this `WritePipe<W>` back to the underlying `W` type.
+    ///
+    /// This will fail with `Err(self)` if multiple references to the underlying `W` exist.
+    pub fn try_into_inner(mut self) -> Result<I, Self> {
+        match Arc::try_unwrap(self.inner) {
+            Ok(rc) => Ok(RwLock::into_inner(rc).unwrap()),
+            Err(inner) => {
+                self.inner = inner;
+                Err(self)
+            }
+        }
+    }
+
+    fn borrow(&self) -> std::sync::RwLockWriteGuard<I> {
+        RwLock::write(&self.inner).unwrap()
+    }
+}
+
+impl Pipe<io::Cursor<Vec<u8>>> {
+    /// Create a new virtual pipe backed by a `Vec<u8>` buffer.
+    pub fn new_in_memory() -> Self {
+        Self::new(io::Cursor::new(vec![]))
+    }
+}
+
+impl From<Vec<u8>> for Pipe<io::Cursor<Vec<u8>>> {
+    fn from(r: Vec<u8>) -> Self {
+        Self::new(io::Cursor::new(r))
+    }
+}
+
+impl<I: Read + Write + Seek> FileIoExt for Pipe<I> {
+    fn advise(&self, offset: u64, len: u64, advice: Advice) -> io::Result<()> {
+        Err(std::io::Error::from_raw_os_error(libc::EBADF))
+    }
+    fn allocate(&self, offset: u64, len: u64) -> io::Result<()> {
+        Err(std::io::Error::from_raw_os_error(libc::EBADF))
+    }
+    fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.borrow().read(buf)
+    }
+    fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
+        self.borrow().read_exact(buf)
+    }
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        Err(std::io::Error::from_raw_os_error(libc::EBADF))
+    }
+    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        Err(std::io::Error::from_raw_os_error(libc::EBADF))
+    }
+    fn read_vectored(&self, bufs: &mut [io::IoSliceMut]) -> io::Result<usize> {
+        self.borrow().read_vectored(bufs)
+    }
+    fn read_to_end(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        self.borrow().read_to_end(buf)
+    }
+    fn read_to_string(&self, buf: &mut String) -> io::Result<usize> {
+        self.borrow().read_to_string(buf)
+    }
+    fn bytes(self) -> io::Bytes<std::fs::File> {
+        panic!("impossible to implement, removing from trait")
+    }
+    fn take(self, limit: u64) -> io::Take<std::fs::File> {
+        panic!("impossible to implement, removing from trait")
+    }
+    fn write(&self, buf: &[u8]) -> io::Result<usize> {
+        self.borrow().write(buf)
+    }
+    fn write_all(&self, buf: &[u8]) -> io::Result<()> {
+        self.borrow().write_all(buf)
+    }
+    fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
+        Err(std::io::Error::from_raw_os_error(libc::EBADF))
+    }
+    fn write_all_at(&self, buf: &[u8], offset: u64) -> io::Result<()> {
+        Err(std::io::Error::from_raw_os_error(libc::EBADF))
+    }
+    fn write_vectored(&self, bufs: &[io::IoSlice]) -> io::Result<usize> {
+        self.borrow().write_vectored(bufs)
+    }
+    fn write_fmt(&mut self, fmt: std::fmt::Arguments) -> io::Result<()> {
+        self.borrow().write_fmt(fmt)
+    }
+    fn flush(&self) -> io::Result<()> {
+        self.borrow().flush()
+    }
+    fn seek(&self, pos: std::io::SeekFrom) -> io::Result<u64> {
+        self.borrow().seek(pos)
+    }
+    fn stream_position(&self) -> io::Result<u64> {
+        Err(std::io::Error::from_raw_os_error(libc::ESPIPE))
+    }
+}
+
+impl<I: Read + Write + Seek> fs_set_times::SetTimes for Pipe<I> {
+    fn set_times(
+        &self,
+        _: Option<fs_set_times::SystemTimeSpec>,
+        _: Option<fs_set_times::SystemTimeSpec>,
+    ) -> io::Result<()> {
+        todo!()
+    }
+}
+
+impl<I: Read + Write + Seek> WasiFile for Pipe<I> {
+    fn datasync(&self) -> Result<(), Error> {
+        Ok(()) // trivial: no implementation needed
+    }
+    fn sync(&self) -> Result<(), Error> {
+        Ok(()) // trivial
+    }
+    fn get_filetype(&self) -> Result<FileType, Error> {
+        Ok(FileType::CharacterDevice) // XXX wrong
+    }
+    fn get_fdflags(&self) -> Result<FdFlags, Error> {
+        Ok(FdFlags::empty())
+    }
+    fn set_fdflags(&self, _fdflags: FdFlags) -> Result<(), Error> {
+        Err(Error::Perm)
+    }
+    fn get_filestat(&self) -> Result<Filestat, Error> {
+        Ok(Filestat {
+            device_id: 0,
+            inode: 0,
+            filetype: self.get_filetype()?,
+            nlink: 0,
+            size: 0, // XXX no way to get a size out of a Read :(
             atim: None,
             mtim: None,
             ctim: None,
