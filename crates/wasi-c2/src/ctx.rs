@@ -19,17 +19,7 @@ pub struct WasiCtx {
 
 impl WasiCtx {
     pub fn builder() -> WasiCtxBuilder {
-        WasiCtxBuilder(WasiCtx::new())
-    }
-
-    pub fn new() -> Self {
-        WasiCtx {
-            args: StringArray::new(),
-            env: StringArray::new(),
-            random: RefCell::new(Box::new(unsafe { cap_rand::rngs::OsRng::default() })),
-            clocks: WasiCtxClocks::default(),
-            table: Rc::new(RefCell::new(Table::new())),
-        }
+        WasiCtxBuilder(WasiCtx::default())
     }
 
     pub fn insert_file(&self, fd: u32, file: Box<dyn WasiFile>, caps: FileCaps) {
@@ -53,6 +43,18 @@ impl WasiCtx {
 
     pub fn table(&self) -> RefMut<Table> {
         self.table.borrow_mut()
+    }
+}
+
+impl Default for WasiCtx {
+    fn default() -> Self {
+        WasiCtx {
+            args: StringArray::new(),
+            env: StringArray::new(),
+            random: RefCell::new(Box::new(unsafe { cap_rand::rngs::OsRng::default() })),
+            clocks: WasiCtxClocks::default(),
+            table: Rc::new(RefCell::new(Table::new())),
+        }
     }
 }
 
