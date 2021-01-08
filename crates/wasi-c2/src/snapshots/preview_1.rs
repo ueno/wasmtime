@@ -127,11 +127,11 @@ impl<'a> wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         argv: &GuestPtr<'b, GuestPtr<'b, u8>>,
         argv_buf: &GuestPtr<'b, u8>,
     ) -> Result<(), Error> {
-        self.args.write_to_guest(argv_buf, argv)
+        self.args().write_to_guest(argv_buf, argv)
     }
 
     fn args_sizes_get(&self) -> Result<(types::Size, types::Size), Error> {
-        Ok((self.args.number_elements(), self.args.cumulative_size()))
+        Ok((self.args().number_elements(), self.args().cumulative_size()))
     }
 
     fn environ_get<'b>(
@@ -139,17 +139,17 @@ impl<'a> wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         environ: &GuestPtr<'b, GuestPtr<'b, u8>>,
         environ_buf: &GuestPtr<'b, u8>,
     ) -> Result<(), Error> {
-        self.env.write_to_guest(environ_buf, environ)
+        self.env().write_to_guest(environ_buf, environ)
     }
 
     fn environ_sizes_get(&self) -> Result<(types::Size, types::Size), Error> {
-        Ok((self.env.number_elements(), self.env.cumulative_size()))
+        Ok((self.env().number_elements(), self.env().cumulative_size()))
     }
 
     fn clock_res_get(&self, id: types::Clockid) -> Result<types::Timestamp, Error> {
         let resolution = match id {
-            types::Clockid::Realtime => Ok(self.clocks.system.resolution()),
-            types::Clockid::Monotonic => Ok(self.clocks.monotonic.resolution()),
+            types::Clockid::Realtime => Ok(self.clocks().system.resolution()),
+            types::Clockid::Monotonic => Ok(self.clocks().monotonic.resolution()),
             types::Clockid::ProcessCputimeId | types::Clockid::ThreadCputimeId => {
                 Err(Error::NotCapable)
             }
@@ -166,15 +166,15 @@ impl<'a> wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         let precision = Duration::from_nanos(precision);
         match id {
             types::Clockid::Realtime => {
-                let now = self.clocks.system.now(precision).into_std();
+                let now = self.clocks().system.now(precision).into_std();
                 let d = now
                     .duration_since(std::time::SystemTime::UNIX_EPOCH)
                     .map_err(|_| Error::NotCapable)?; // XXX wrong
                 Ok(d.as_nanos().try_into()?)
             }
             types::Clockid::Monotonic => {
-                let now = self.clocks.monotonic.now(precision);
-                let d = now.duration_since(self.clocks.creation_time);
+                let now = self.clocks().monotonic.now(precision);
+                let d = now.duration_since(self.clocks().creation_time);
                 Ok(d.as_nanos().try_into()?)
             }
             types::Clockid::ProcessCputimeId | types::Clockid::ThreadCputimeId => Err(Error::Badf),
@@ -899,7 +899,7 @@ impl<'a> wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
 
     fn random_get(&self, buf: &GuestPtr<u8>, buf_len: types::Size) -> Result<(), Error> {
         let mut buf = buf.as_array(buf_len).as_slice_mut()?;
-        self.random.borrow_mut().try_fill_bytes(buf.deref_mut())?;
+        self.random().try_fill_bytes(buf.deref_mut())?;
         Ok(())
     }
 
